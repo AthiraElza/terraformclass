@@ -1,0 +1,36 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source = "hashicorp/azurerm"
+      version = "4.19.0"
+    }
+  }
+}
+
+provider "azurerm" {
+    features {}
+subscription_id   = "3084f2fb-3277-4697-b7bb-463367fb8b92"
+  tenant_id         = "38fb3b20-a781-4c88-9110-8c817f19c4e1"
+  client_id         = "ab2287fb-95ac-4a04-ad50-ef3807382e02"
+  client_secret     = "ANg8Q~Ejbypf2w-b3J1R8QOT09CDpXH7TCCgAcWu"
+}
+
+resource "azurerm_resource_group" "rg1" {
+count = 3
+name = "rg-${count.index+1}"
+location = "eastus"
+}
+resource "azurerm_virtual_network" "vnet1" {
+  count = 3
+  name                = "vnet -${count.index+1}"
+  address_space       = ["10.${count.index}.0.0/16"]
+  location            = azurerm_resource_group.rg1[count.index].location
+  resource_group_name = azurerm_resource_group.rg1[count.index].name
+}
+resource "azurerm_subnet" "subnet" {
+  count = 9
+  name                 = "subnet-${floor(count.index /3) + 1} -${count.index % 3 + 1}"
+  resource_group_name  = azurerm_resource_group.rg1[floor(count.index / 3)].name
+  virtual_network_name = azurerm_virtual_network.vnet1[floor(count.index / 3)].name
+  address_prefixes     = ["10.${floor(count.index /3 )}.${count.index % 3 +1}.0/24"]
+}

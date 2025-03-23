@@ -1,0 +1,112 @@
+terraform {
+  required_providers {
+    azurerm = {
+      source = "hashicorp/azurerm"
+      version = "4.19.0"
+    }
+  }
+}
+
+provider "azurerm" {
+    features {}
+subscription_id   = "3084f2fb-3277-4697-b7bb-463367fb8b92"
+  tenant_id         = "38fb3b20-a781-4c88-9110-8c817f19c4e1"
+  client_id         = "ab2287fb-95ac-4a04-ad50-ef3807382e02"
+  client_secret     = "ANg8Q~Ejbypf2w-b3J1R8QOT09CDpXH7TCCgAcWu"
+}
+
+resource "azurerm_resource_group" "rg" {
+name = "ResourceGroup"
+location = "eastus"
+}
+
+resource "azurerm_network_security_group" "nsg" {
+  name                = "myNSG"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  security_rule {
+    name                       = "Allow-SSH"
+    priority                   = 1001
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "22"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+resource "azurerm_public_ip" "public_ip" {
+  name                = "elzaPublicIp1"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  allocation_method   = "Static"
+}
+resource "azurerm_virtual_network" "vnet" {
+  name                = "elzavnetwork"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_subnet" "subnet" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.2.0/24"]
+}
+
+resource "azurerm_network_security_group" "NSG" {
+  name                = "elzansg"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_network_interface" "NIC" {
+  name                = "elzanic"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  ip_configuration {
+    name                          = "ipconfigel"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_network_interface_security_group_association" "example" {
+  network_interface_id      = azurerm_network_interface.NIC.id
+  network_security_group_id = azurerm_network_security_group.NSG.id
+}
+resource "azurerm_linux_virtual_machine" "VM" {
+  name                = "elzavm"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  size                = "Standard_F2"
+  admin_username      = "adminuser"
+  network_interface_ids = [
+    azurerm_network_interface.NIC.id,
+  ]
+
+  admin_ssh_key {
+    username   = "adminuser"
+    public_key = file("~/.ssh/id_rsa.pub")
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts"
+    version   = "latest"
+  }
+}
+
+output "public_ip_address" {
+  value =azurerm_public_ip.public_ip.ip_address
+}
